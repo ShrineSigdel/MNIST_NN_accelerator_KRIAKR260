@@ -2,7 +2,7 @@
 
 module tb_top;
 
-parameter int N = 4, DATA_W = 8, ACC_W = 16, ADDR_W = 8;
+parameter int N = 4, DATA_W = 8, ACC_W = 32, ADDR_W = 8;
 localparam int WORD_W = N * ACC_W;
 
 logic clk, rst, load, start, done;

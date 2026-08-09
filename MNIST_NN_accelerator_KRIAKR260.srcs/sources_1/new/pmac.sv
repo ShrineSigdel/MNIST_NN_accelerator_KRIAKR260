@@ -2,9 +2,10 @@
 
 module pmac # (
     parameter int DATA_W = 8,
-    parameter int ACC_W = 16
+    parameter int ACC_W = 32
 )(
     input logic clk, rst,
+    input logic acc_clr,
     input logic  [DATA_W-1:0] a_in , b_in,
     output logic  [DATA_W-1:0] a_out, b_out,
     output logic  [ACC_W-1:0] acc_out
@@ -26,6 +27,6 @@ always_ff @(posedge clk or posedge rst) begin
 end
 
 assign acc_out = acc_reg;
-assign acc_next = acc_reg  + a_in * b_in; 
+assign acc_next = acc_clr ? '0 : (acc_reg + a_in * b_in);
 
 endmodule

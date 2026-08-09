@@ -4,6 +4,7 @@ module skew_buffer #(
     parameter int N = 4
 )(
     input logic clk, rst,
+    input logic clr, 
     input logic en,
     input logic [DATA_W-1:0] data_in [N-1:0],
     output logic [DATA_W-1:0] data_out [N-1:0]
@@ -21,7 +22,7 @@ generate
             else begin 
                 logic [DATA_W - 1:0] sr [i-1:0];
                 always_ff @( posedge clk or posedge rst ) begin : g_skew
-                    if (rst) begin 
+                    if (rst || clr) begin 
                         for (int  k = 0; k < i; k++) sr[k] <= '0;
                     end
                     else if(en) begin

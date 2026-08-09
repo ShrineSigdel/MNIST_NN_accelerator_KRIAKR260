@@ -2,7 +2,7 @@
 
 module top #(
     parameter int DATA_W = 8,
-    parameter int ACC_W  = 16,
+    parameter int ACC_W  = 32,
     parameter int N      = 4,
     parameter int ADDR_W = 8,
     localparam int WORD_W = N * ACC_W
