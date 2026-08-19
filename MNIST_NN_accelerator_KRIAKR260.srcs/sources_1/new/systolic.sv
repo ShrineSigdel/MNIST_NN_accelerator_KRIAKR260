@@ -22,11 +22,11 @@ generate
     genvar i, j ;
     for (i = 0 ; i < N; i++ ) begin : gen_row 
         for (j = 0 ; j < N; j++ ) begin : gen_col
-            pmac uut_pmac #(
+            pmac #(
                 .DATA_W(DATA_W),
                 .ACC_W(ACC_W)
-            ) (
-            )(
+            ) uut_pmac
+            (
                 .clk(clk),
                 .rst(rst),
                 .acc_clr(acc_clr),

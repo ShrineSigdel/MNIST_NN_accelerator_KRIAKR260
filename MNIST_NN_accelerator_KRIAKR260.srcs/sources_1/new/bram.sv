@@ -3,18 +3,18 @@
 
 module bram # (
     parameter int DATA_W = 32,
-    parameter int ADDR_W = 8 //  (2^8 = 256 locations)
+    parameter int ADDR_W = 8, //  (2^8 = 256 locations)
     parameter string INIT_FILE = ""
 )(
     input logic clk,
     input logic we,
     input logic [ADDR_W-1:0] addr,
     input logic [DATA_W-1:0] data_in,
-    output logic [DATA_W-1:0] data_out,
+    output logic [DATA_W-1:0] data_out
 );
 
 // Create a memory array to store the data 
-(* ram_style = "block" *) logic [DATA_W-1:0] mem [(1<<ADDR_W)-1:0]; // 2^ADDR_W locations
+(* ram_style = "block" *) logic [DATA_W-1:0] mem [0:(1<<ADDR_W)-1];
 
 initial begin
     if (INIT_FILE != "") begin

@@ -1,172 +1,108 @@
 `timescale 1ns / 1ps
 
+// tb_top: N=16 MNIST inference regression for the current `top` (784 -> 150 -> 10).
+//
+// Verifies:
+//   1) the four preload banks actually loaded from the .mem files ($readmemh)
+//      by hierarchical readback of known words (X => the .mem files were not
+//      found in the simulator working directory);
+//   2) a full run completes (done) and `digit` matches the pure-Python
+//      reference computed from data/fc*_*.bin + data/mem_files/image.mem.
+//
+// EXPECTED_DIGIT = 3 for the placeholder image.mem (digit "5"). If image.mem is
+// regenerated, recompute the reference (data/mem_files) and update this value.
+
 module tb_top;
 
-parameter int N = 4, DATA_W = 8, ACC_W = 32, ADDR_W = 8;
-localparam int WORD_W = N * ACC_W;
+    logic clk, rst, start, done;
+    logic [3:0] digit;
+    int fail = 0;
 
-logic clk, rst, load, start, done;
-logic load_we_a, load_we_b;
-logic [ADDR_W-1:0] load_addr_a, load_addr_b;
-logic [WORD_W-1:0] load_din_a, load_din_b;
-logic [ACC_W-1:0] acc_out [N-1:0][N-1:0];
+    localparam logic [3:0] EXPECTED_DIGIT = 4'd3;
 
-int A [N][N], B [N][N], C [N][N];
-int fail = 0;
+    top dut (
+        .clk   (clk),
+        .rst   (rst),
+        .start (start),
+        .done  (done),
+        .digit (digit)
+    );
 
-top #(.DATA_W(DATA_W), .ACC_W(ACC_W), .N(N), .ADDR_W(ADDR_W)) dut (
-    .clk(clk), .rst(rst), .load(load), .start(start),
-    .load_we_a(load_we_a), .load_we_b(load_we_b),
-    .load_addr_a(load_addr_a), .load_addr_b(load_addr_b),
-    .load_din_a(load_din_a), .load_din_b(load_din_b),
-    .done(done), .acc_out(acc_out)
-);
+    always #5 clk = ~clk;
 
-always #5 clk = ~clk;
+    // hierarchical readback of a preloaded word; fails on X or mismatch
+    task automatic check_word(string name, input logic [127:0] got, input logic [127:0] exp);
+        if ($isunknown(got)) begin
+            $display("FAIL: %s = X -> .mem file not loaded (check sim working dir)", name);
+            fail = 1;
+        end else if (got !== exp) begin
+            $display("FAIL: %s = %h exp %h", name, got, exp);
+            fail = 1;
+        end else begin
+            $display("OK  : %s = %h", name, got);
+        end
+    endtask
 
-// per-cycle monitor of key signals (state != IDLE)
-always @(posedge clk) begin
-    if (!rst && dut.u_seq.state != 3'b000)
-        $display("t=%0t state=%0d feed_en=%0b feed_sel=%0b addr_a=%0d addr_b=%0d | a_col={%0d %0d %0d %0d} b_row={%0d %0d %0d %0d}",
-            $time, dut.u_seq.state, dut.feed_en, dut.feed_sel,
-            dut.u_seq.addr_a, dut.u_seq.addr_b,
-            dut.a_col[0], dut.a_col[1], dut.a_col[2], dut.a_col[3],
-            dut.b_row[0], dut.b_row[1], dut.b_row[2], dut.b_row[3]);
-end
+    initial begin
+        clk = 0; rst = 1; start = 0;
 
-// pack a full A column / B row / C row into a single WORD_W word
-function automatic logic [WORD_W-1:0] pack_col(input int idx);
-    logic [WORD_W-1:0] w;
-    w = '0;
-    for (int i = 0; i < N; i++)
-        w[i*ACC_W +: DATA_W] = A[i][idx][DATA_W-1:0];
-    return w;
-endfunction
+        // ---- 1) mem-load proof (banks are static after $readmemh) ----
+        repeat (3) @(posedge clk);
+        @(negedge clk); rst = 0;
 
-function automatic logic [WORD_W-1:0] pack_row(input int idx);
-    logic [WORD_W-1:0] w;
-    w = '0;
-    for (int j = 0; j < N; j++)
-        w[j*ACC_W +: DATA_W] = B[idx][j][DATA_W-1:0];
-    return w;
-endfunction
+        check_word("weights[0]   ", dut.u_weights.mem[0],
+                   128'hfdfd030304fffd0203fdfc0102fdfd00);
+        check_word("weights[7840]", dut.u_weights.mem[7840],
+                   128'h000000000000150ed0eb23360abd04c5);
+        check_word("bias[0]      ", 128'(dut.u_bias.mem[0]),
+                   128'h0000000000000000000000000000075b);
+        check_word("bias[160]    ", 128'(dut.u_bias.mem[160]),
+                   128'h000000000000000000000000ffffffa9);
+        check_word("instr[0]     ", 128'(dut.u_instr.mem[0]),
+                   128'h00000000000000000000000000000000);
+        check_word("instr[31]    ", 128'(dut.u_instr.mem[31]),
+                   128'h0000000000000000000000096f500009);
+        check_word("instr[32]    ", 128'(dut.u_instr.mem[32]),
+                   128'h00000000000000000000000000140002);
+        check_word("image[100]   ", dut.u_image.mem[100],
+                   128'h7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f);
 
-function automatic logic [WORD_W-1:0] pack_crow(input int r);
-    logic [WORD_W-1:0] w;
-    w = '0;
-    for (int j = 0; j < N; j++)
-        w[j*ACC_W +: ACC_W] = C[r][j][ACC_W-1:0];
-    return w;
-endfunction
+        if (fail) begin
+            $display("ABORT: preload banks did not load; put the 4 .mem files in the");
+            $display("       xsim working directory and rerun.");
+            $finish;
+        end
+        $display("PRELOAD OK: all banks initialized from .mem files");
 
-initial begin
-    clk = 0; rst = 1; load = 0; start = 0;
-    load_we_a = 0; load_we_b = 0;
-    load_addr_a = 0; load_addr_b = 0;
-    load_din_a = 0; load_din_b = 0;
+        // ---- 2) run one inference ----
+        @(negedge clk); start = 1;
+        @(negedge clk); start = 0;
 
-    for (int i = 0; i < N; i++) for (int j = 0; j < N; j++) begin
-        A[i][j] = (i == j) ? (i + 1) : 0;   // diagonal A
-        B[i][j] = i + 1;                    // B: row i all = i+1
-    end
+        fork
+            begin : timeout_t
+                repeat (20000) @(posedge clk);
+                $display("TIMEOUT waiting for done");
+                fail = 1;
+                disable check_t;
+            end
+            begin : check_t
+                wait (done == 1);
+                @(posedge clk);   // let digit settle past the done edge
 
-    // expected C = A * B
-    for (int i = 0; i < N; i++) for (int j = 0; j < N; j++) begin
-        C[i][j] = 0;
-        for (int k = 0; k < N; k++) C[i][j] += A[i][k] * B[k][j];
-    end
+                if (digit === EXPECTED_DIGIT) begin
+                    $display("INFERENCE OK : digit = %0d (expected %0d)", digit, EXPECTED_DIGIT);
+                end else begin
+                    $display("FAIL: digit = %0d exp %0d (recompute EXPECTED_DIGIT if image.mem changed)",
+                             digit, EXPECTED_DIGIT);
+                    fail = 1;
+                end
+                disable timeout_t;
+            end
+        join
 
-    // hold reset for 3 cycles, release race-free on a negedge
-    repeat (3) @(posedge clk);
-    @(negedge clk); rst = 0;
-
-    // ---- Load A through port A: mem_a[k] = packed column k ----
-    @(negedge clk); load = 1;
-    for (int k = 0; k < N; k++) begin
-        @(negedge clk);
-        load_we_a = 1; load_addr_a = k; load_din_a = pack_col(k);
-    end
-    @(negedge clk); load_we_a = 0;
-
-    // ---- Load B through port B: mem_b[k] = packed row k ----
-    for (int k = 0; k < N; k++) begin
-        @(negedge clk);
-        load_we_b = 1; load_addr_b = k; load_din_b = pack_row(k);
-    end
-    @(negedge clk); load_we_b = 0;
-
-    // ---- Pre-flight readback check (abort early if memory is empty) ----
-    @(negedge clk); load_addr_a = 0; load_addr_b = 0;
-    @(posedge clk);                 // data_out latches mem[0]
-    @(negedge clk);                 // settled, race-free read
-    if (dut.bram_out_a !== pack_col(0)) begin
-        $display("MEM-A LOAD FAIL: bram_out_a=%h exp=%h", dut.bram_out_a, pack_col(0));
-        fail = 1;
-    end
-    if (dut.bram_out_b !== pack_row(0)) begin
-        $display("MEM-B LOAD FAIL: bram_out_b=%h exp=%h", dut.bram_out_b, pack_row(0));
-        fail = 1;
-    end
-    if (fail) begin
-        $display("ABORT: memory load did not take; fix load path first");
+        if (fail) $display("TEST FAILED");
+        else      $display("TEST PASSED");
         $finish;
     end
-    $display("MEMORY LOAD OK (bram_out_a=%h bram_out_b=%h)", dut.bram_out_a, dut.bram_out_b);
-
-    // ---- Reset-state check (acc_out must be 0 before run) ----
-    for (int i = 0; i < N; i++) for (int j = 0; j < N; j++)
-        if (acc_out[i][j] !== '0) begin
-            $display("RESET-FAIL acc_out[%0d][%0d] = %0d", i, j, acc_out[i][j]);
-            fail = 1;
-        end
-
-    // ---- Run GEMM ----
-    @(negedge clk); load = 0;
-    @(negedge clk); start = 1;
-    @(posedge clk);              // FSM samples start=1, enters FEED
-    @(negedge clk); start = 0;
-
-    fork
-        begin : timeout_t
-            repeat (200) @(posedge clk);
-            $display("TIMEOUT waiting for done");
-            fail = 1;
-            disable check_t;
-        end
-        begin : check_t
-            wait (done == 1);
-            @(posedge clk);
-
-            for (int i = 0; i < N; i++) for (int j = 0; j < N; j++) begin
-                if ($isunknown(acc_out[i][j])) begin
-                    $display("X-DETECTED acc_out[%0d][%0d]", i, j);
-                    fail = 1;
-                end else if (acc_out[i][j] !== C[i][j][ACC_W-1:0]) begin
-                    $display("MISMATCH [%0d][%0d] got %0d exp %0d", i, j, acc_out[i][j], C[i][j]);
-                    fail = 1;
-                end
-            end
-
-            // ---- C writeback readback via port A: addr N+r ----
-            for (int r = 0; r < N; r++) begin
-                @(negedge clk);
-                load = 1; load_we_a = 0; load_addr_a = N + r;
-                @(posedge clk);         // data_out latches mem_a[N+r]
-                @(negedge clk);         // settled, race-free read
-                if (dut.bram_out_a !== pack_crow(r)) begin
-                    $display("WB-MISMATCH row %0d: got %h exp %h", r, dut.bram_out_a, pack_crow(r));
-                    fail = 1;
-                end
-            end
-            @(negedge clk); load = 0;
-
-            disable timeout_t;
-        end
-    join
-
-    if (fail) $display("TEST FAILED");
-    else      $display("TEST PASSED");
-    $finish;
-end
 
 endmodule

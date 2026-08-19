@@ -1,0 +1,28 @@
+{
+  "input_shift": 7,
+  "hidden_shift": 3,
+  "rescale_shift_after_layer1": 11,
+  "fc1": {
+    "weight_shape": [
+      150,
+      784
+    ],
+    "weight_shift": 7,
+    "bias_shape": [
+      150
+    ],
+    "bias_shift": 14
+  },
+  "fc2": {
+    "weight_shape": [
+      10,
+      150
+    ],
+    "weight_shift": 7,
+    "bias_shape": [
+      10
+    ],
+    "bias_shift": 10
+  },
+  "notes": "All scales are powers of two (scale = 2^-shift), so every rescale in the pipeline is a bit shift, never a multiply/divide. Pipeline: acc1_int32 = x_int8 @ W1_int8.T + b1_int32; hidden_int8 = saturate(ReLU(round_shift_right(acc1, rescale_shift_after_layer1))); acc2_int32 = hidden_int8 @ W2_int8.T + b2_int32; predicted class = argmax(acc2) (no rescale needed on the output, argmax is scale-invariant)."
+}

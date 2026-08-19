@@ -38,7 +38,12 @@ module cu #(
     output logic post_qen , // quantization enable
     output logic post_relu , 
     output logic [4:0] post_shift,
+    output logic [3:0] post_j,   // neuron index for post (run_cnt[4:1])
+    output logic post_valid,     // 1 on each POST write phase (odd run_cnt)
     output logic logit_we,  // QEN = 0, word-write pulse -> argmax
+
+    // -- A-source select for top-level data mux (image=0 / act=1)
+    output logic a_sel,
 
     // -- done signal
     output logic done
@@ -58,7 +63,7 @@ because the instruction memory is a BRAM and has a 2-cycle read latency.
 
     typedef enum logic [2:0] { IDLE, FETCH1, FETCH2, RUN, DONE_ST } state_t;
 
-    state_t state, next_state;
+    state_t state;
 
     logic [T_W-1:0] run_cnt; // run_cnt = cycle counter for RUN state
     logic [T_W-1:0] run_cnt_end;
@@ -66,7 +71,7 @@ because the instruction memory is a BRAM and has a 2-cycle read latency.
 
     // instruction decode
     logic [2:0]  opcode;
-    logic        a_sel, qen, relu;
+    logic        qen, relu;
     logic [A_W-1:0]  a_base;
     logic [B_W-1:0]  b_base;
     logic [11:0] k_cnt;
@@ -134,13 +139,12 @@ because the instruction memory is a BRAM and has a 2-cycle read latency.
 logic [T_W-1:0] stream;   // min(t, K-1), saturated during drain 
 logic [A_W-1:0] a_walk;
 logic [B_W-1:0] b_walk;
-logic [3:0]     post_j;
 
 
 assign stream = (run_cnt < k_cnt) ? run_cnt : k_cnt - 1'b1;
 assign a_walk = a_base + stream ;
 assign b_walk = b_base + stream ;
-assign post_j = run_cnt[4:1]; // Todo : to be understood later when implementing post.sv 
+assign post_j = run_cnt[4:1]; // j = neuron index (run_cnt / 2)
 
 
 // -- pc control -- 
@@ -163,6 +167,7 @@ assign pc_inc = (state == FETCH1) ;
         post_qen     = 1'b0;
         post_relu    = 1'b0;
         post_shift   = '0;
+        post_valid   = 1'b0;
 
         unique case (state)
             RUN: begin
@@ -178,7 +183,7 @@ assign pc_inc = (state == FETCH1) ;
                         if (a_sel) act_addr = a_walk;
                         else       image_addr = a_walk;
                     end
-                    OP_POST: begin // Todo: to be understood later when implementing post.sv
+                    OP_POST: begin
                         post_qen   = qen;
                         post_relu  = relu;
                         post_shift = shift;
@@ -188,6 +193,7 @@ assign pc_inc = (state == FETCH1) ;
                             bias_addr = bias_base + post_j;
                             
                         end else begin
+                            post_valid = 1'b1;
                             act_we   = qen ? 1'b1 : (post_j[1:0] == 2'b11);
                             logit_we = ~qen && act_we;
                         end
