@@ -141,7 +141,7 @@ logic [A_W-1:0] a_walk;
 logic [B_W-1:0] b_walk;
 
 
-assign stream = (run_cnt < k_cnt) ? run_cnt : k_cnt - 1'b1;
+assign stream = (run_cnt >= 1 && run_cnt <= k_cnt) ? run_cnt - 1'b1 : k_cnt - 1'b1;
 assign a_walk = a_base + stream ;
 assign b_walk = b_base + stream ;
 assign post_j = run_cnt[4:1]; // j = neuron index (run_cnt / 2)

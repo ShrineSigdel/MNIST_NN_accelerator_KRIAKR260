@@ -11,7 +11,7 @@ module pmac # (
     output logic  [ACC_W-1:0] acc_out
 );
 
-logic [ACC_W-1:0] acc_reg, acc_next;
+logic signed [ACC_W-1:0] acc_reg, acc_next;
 
 // Sequential logic 
 always_ff @(posedge clk or posedge rst) begin
@@ -27,6 +27,9 @@ always_ff @(posedge clk or posedge rst) begin
 end
 
 assign acc_out = acc_reg;
-assign acc_next = acc_clr ? '0 : (acc_reg + a_in * b_in);
+always_comb begin
+    if (acc_clr) acc_next = '0;
+    else         acc_next = acc_reg + $signed(a_in) * $signed(b_in);
+end
 
 endmodule

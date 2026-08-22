@@ -9,8 +9,8 @@
 //   2) a full run completes (done) and `digit` matches the pure-Python
 //      reference computed from data/fc*_*.bin + data/mem_files/image.mem.
 //
-// EXPECTED_DIGIT = 3 for the placeholder image.mem (digit "5"). If image.mem is
-// regenerated, recompute the reference (data/mem_files) and update this value.
+// EXPECTED_DIGIT = 7 for image.mem (MNIST test-set digit 7, sample 0). If
+// image.mem is regenerated, recompute the reference (data/mem_files) and update.
 
 module tb_top;
 
@@ -18,7 +18,7 @@ module tb_top;
     logic [3:0] digit;
     int fail = 0;
 
-    localparam logic [3:0] EXPECTED_DIGIT = 4'd3;
+    localparam logic [3:0] EXPECTED_DIGIT = 4'd7;
 
     top dut (
         .clk   (clk),
@@ -65,7 +65,7 @@ module tb_top;
         check_word("instr[32]    ", 128'(dut.u_instr.mem[32]),
                    128'h00000000000000000000000000140002);
         check_word("image[100]   ", dut.u_image.mem[100],
-                   128'h7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f);
+                   128'h00000000000000000000000000000000);
 
         if (fail) begin
             $display("ABORT: preload banks did not load; put the 4 .mem files in the");
